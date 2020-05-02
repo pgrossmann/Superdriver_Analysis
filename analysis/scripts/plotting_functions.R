@@ -1,0 +1,324 @@
+#' plots frequencies of genotypes in descending order
+#' @param tab population table
+plotFrequencies <- function(tab, ...) {
+  tmp <- tab[order(tab[,"mean.count"], decreasing=T),]
+  plot(1:nrow(tmp), tmp[,"mean.count"], xlab="Genotype", ylab="Count", ...)
+  lines(tmp[,"mean.count"])
+}
+
+#' @param lLTabs list of lists of tables
+#' @param columns vector of length 2 containing column names of tables in lLTabs to be plotted
+#' @param histType string element of c("density","highLow","lowHigh"). Only used when length(columns) == 1
+#' With "density" density estimations are plotted, with "highLow" values are sorted from high to low 
+#' and plotted then
+#' @param lins logical indicating if lines on the values should be plotted
+#' @param lgnd logical indicating if legend should be plotted
+#' @param lLTabs_sd same datastructure as lLTabs containg standard deviates. if not null horizontal/vertical
+#' lines are added to each point indicating sd in each direction
+scatterPlot <- function(lLTabs, columns, histType="density", lins=TRUE, lgnd=TRUE, lLTabs_sd=NULL, 
+                        plotNamesAs=FALSE, ...) {
+#   if (length(vLTabs) != length(v))
+  if (length(columns) > 2)
+    stop("length(columns) > 2 not implemented")
+  
+  getRange <- function(column) {
+    range(
+      sapply(lLTabs, function(LTabs) 
+        sapply(LTabs, function(tabs) 
+          tabs[,column]
+        ))
+      )
+  }
+  
+  legendChars <- NULL
+  legendLines <- NULL
+  legendPoints <- NULL
+  legendCols <- NULL
+  
+  if (length(columns) == 2) {
+#     if (!is.null(histType))
+#       warning("histType is only used when length(columns) < 2")
+    
+    xli <- getRange(columns[1])
+    yli <- getRange(columns[2])
+    
+    plot(xli,c(yli[2],yli[1]), type="n", xlim=xli, ylim=yli, xlab=columns[1], ylab=columns[2])
+    
+    for (i in 1:length(lLTabs)) {
+      LTabs <- lLTabs[[i]]
+      for (j in 1:length(LTabs)) {
+        tab <- LTabs[[j]]
+        matr <- cbind(tab[,columns[1]], tab[,columns[2]])
+        rowOrder <- order(matr[,1])
+        matr <- matr[rowOrder,]
+        if (lins)
+          lines(matr, lty=i, col=j)
+        points(matr, pch=i, col=j)
+        if (!is.null(lLTabs_sd)) {
+          tab_sd <- lLTabs_sd[[i]][[j]]
+          matr_sd <- cbind(tab_sd[,columns[1]], tab_sd[,columns[2]])
+          matr_sd <- matr_sd[rowOrder,]
+          sapply(1:nrow(matr_sd), 
+                 function(i) {
+                   arrows(matr[i,1]-matr_sd[i,1], matr[i,2],
+                          matr[i,1]+matr_sd[i,1], matr[i,2], lty=i, col=j, length=0, angle=0)
+                   arrows(matr[i,1], matr[i,2]-matr_sd[i,2],
+                          matr[i,1], matr[i,2]+matr_sd[i,2], lty=i, col=j, length=0, angle=0)
+                 }) 
+        }
+          
+#         if (!is.null(vLNames)) {
+        if (!plotNamesAs)
+          legendChars <- c(legendChars, sprintf("%s %s",names(lLTabs)[i],names(LTabs)[j]))
+        else
+          legendChars <- c(legendChars, sprintf("%s",names(LTabs)[j]))
+          legendLines <- c(legendLines, i)
+          legendPoints <- c(legendPoints, i)
+          legendCols <- c(legendCols, j)
+#         }
+      }
+    }
+  }
+  
+  if (length(columns) == 1) {
+    
+    ## following block is only required to adjust xlim and ylim for later adding points/lines
+    if (histType != "density") {
+      yli <- getRange(columns[1])
+      xmax <- max(sapply(lLTabs, function(x) sapply(x, function(y) nrow(y))))
+      xli <- c(1,xmax)
+      plot(1,1, type="n", xlim=c(1,xmax), ylim=yli, ylab=columns[1], xlab="Index")
+    } else {
+      xli <- range(sapply(lLTabs, function(x) sapply(x, function(y) (y[,columns[1]]))))
+      yli <- range(sapply(lLTabs, function(x) sapply(x, function(y) density(y[,columns[1]])$y)))
+      plot(1,1, type="n", xlim=xli, ylim=yli, ylab="Density", xlab=columns[1])
+    }
+    
+    for (i in 1:length(lLTabs)) {
+      LTabs <- lLTabs[[i]]
+      for (j in 1:length(LTabs)) {
+        tab <- LTabs[[j]]
+        if (histType == "density") {
+#           lines(density(tab[,columns[1]]), lty=i, col=j)
+#           points(tab[,columns[1]], tab[,columns[2]], pch=i, col=j)   
+          if (lins)
+            lines(density(tab[,columns[1]]), lty=i, col=j)
+        } else if (histType == "highLow") {
+          tmp_sorted <- sort(tab[,columns[1]], decreasing=T)
+          points(1:nrow(tab), tmp_sorted, pch=i, col=j)
+          if (!is.null(lLTabs_sd)) {
+            vec_sd <- lLTabs_sd[[i]][[j]][order(tab[,columns[1]], decreasing=T),columns[1]]
+            sapply(1:length(vec_sd), 
+                   function(i) arrows(i, tmp_sorted[i]-vec_sd[i],
+                                      i, tmp_sorted[i]+vec_sd[i], lty=i, col=j, length=0, angle=0))
+          }
+          if (lins)  
+            lines(1:nrow(tab), tmp_sorted, lty=i, col=j)
+        } else if (histType == "lowHigh") {
+          tmp_sorted <- sort(tab[,columns[1]], decreasing=T)
+          points(1:nrow(tab), tmp_sorted, pch=i, col=j)
+          if (!is.null(lLTabs_sd)) {
+            vec_sd <- lLTabs_sd[[i]][[j]][order(tab[,columns[1]], decreasing=T),columns[1]]
+            sapply(1:length(vec_sd), 
+                   function(i) arrows(i, tmp_sorted[i]-vec_sd[i],
+                                      i, tmp_sorted[i]+vec_sd[i], lty=i, col=j, length=0, angle=0))
+          }
+          if (lins)
+            lines(1:nrow(tab), tmp_sorted, lty=i, col=j)
+        } else stop ("histType needs to be element c(density, highLow, lowHigh")
+#         if (!is.null(vLNames)) {
+        if (!plotNamesAs)
+          legendChars <- c(legendChars, sprintf("%s %s",names(lLTabs)[i],names(LTabs)[j]))
+        else
+          legendChars <- c(legendChars, sprintf("%s",names(LTabs)[j]))
+          legendLines <- c(legendLines, i)
+          legendPoints <- c(legendPoints, i)
+          legendCols <- c(legendCols, j)
+#         }
+      }
+    }
+  } else {
+    
+  }
+#   print(legendChars)
+#   print(legendPoints)
+#   print(legendLines)
+  if (length(legendChars) > 0 & lgnd)
+    legend("topright", legend=legendChars, lty=legendLines, col=legendCols, pch=legendPoints)
+} 
+
+#' TODO: Outsource redundant code in if clauses length(columns) == 1 & == 2
+#' essentially the same function as scatterPlot2, but using levels=3 usuable for a level deeper of lLTabs, 
+#' in particular meant to plot intermediate population results
+scatterPlot2 <- function(lLTabs, columns, levels, histType="density", lins=TRUE, pons=TRUE, lgnd=TRUE, ...) {
+  #   if (length(vLTabs) != length(v))
+  if (length(columns) > 2)
+    stop("length(columns) > 2 not implemented")
+  
+  if (! levels %in% 2:3)
+    stop("levels needs to be element of 2:3")
+  
+  getRange <- function(column) {
+    range(
+      sapply(lLTabs, function(LTabs) 
+        sapply(LTabs, function(tabs) 
+          if (levels == 2)
+            return(tabs[,column])
+          else if (levels == 3)
+            sapply(tabs, function(tt) tt[,column])
+        ))
+    )
+  }
+  
+  legendChars <- NULL
+  legendLines <- NULL
+  legendPoints <- NULL
+  legendCols <- NULL
+  
+  if (length(columns) == 2) {
+#     if (!is.null(histType))
+#       warning("histType is only used when length(columns) < 2")
+    
+    xli <- getRange(columns[1])
+    yli <- getRange(columns[2])
+    
+    plot(xli,c(yli[2],yli[1]), type="n", xlim=xli, ylim=yli, xlab=columns[1], ylab=columns[2])
+    
+    i_min <- ifelse(length(lLTabs) > 0, 1, 0)
+    if (i_min > 0)
+    for (i in i_min:length(lLTabs)) {
+      LTabs <- lLTabs[[i]]
+      j_min <- ifelse(length(LTabs) > 0, 1, 0)
+      if (j_min > 0)
+      for (j in j_min:length(LTabs)) {
+        tab <- LTabs[[j]]
+        if (levels == 2) {          
+          matr <- cbind(tab[,columns[1]], tab[,columns[2]])
+          matr <- matr[order(matr[,1]),]
+          if (lins)
+            lines(matr, lty=i, col=j)
+          if (pons)
+            points(matr, pch=i, col=j)
+        } else if (levels == 3) {
+          k_min <- ifelse(length(tab) > 0, 1, 0)
+          for (k in k_min:length(tab)) {
+            tt <- tab[[k]]
+            matr <- cbind(tt[,columns[1]], tt[,columns[2]])
+            matr <- matr[order(matr[,1]),]
+            if (pons)
+              points(matr, pch=i, col=j)
+          }
+          if (lins) {
+            tmp_meanTable <- getMeansOf(tab)
+            lines(tmp_meanTable[,columns[1]], tmp_meanTable[,columns[2]], lty=i, col=j)
+          }
+        }       
+        #         if (!is.null(vLNames)) {
+        legendChars <- c(legendChars, sprintf("%s %s",names(lLTabs)[i],names(LTabs)[j]))
+        legendLines <- c(legendLines, i)
+        legendPoints <- c(legendPoints, i)
+        legendCols <- c(legendCols, j)
+        #         }
+      }
+    }
+  }
+  ## hier weiter coden
+  if (length(columns) == 1) {
+    
+    ## following block is only required to adjust xlim and ylim for later adding points/lines
+    if (histType != "density") {
+      yli <- getRange(columns[1])
+      if (levels == 2)
+        xmax <- max(sapply(lLTabs, function(x) sapply(x, function(y) nrow(y))))
+      else if (levels == 3)
+        xmax <- max(unlist(sapply(lLTabs, function(x) sapply(x, function(y) sapply(y, function(z) nrow(z))))))
+      xli <- c(1,xmax)
+      plot(1,1, type="n", xlim=c(1,xmax), ylim=yli, ylab=columns[1], xlab="Index")
+    } else {
+      if (levels == 2) {
+        xli <- range(sapply(lLTabs, function(x) sapply(x, function(y) (y[,columns[1]]))))
+        yli <- range(sapply(lLTabs, function(x) sapply(x, function(y) density(y[,columns[1]])$y)))
+      } else if (levels == 3) {
+        xli <- range(sapply(lLTabs, function(x) sapply(x, function(y) sapply(y, function(z) z[,columns[1]]))))
+        yli <- range(sapply(lLTabs, function(x) sapply(x, function(y) sapply(y, function(z) density(z[,columns[1]])$y))))
+      }
+      plot(1,1, type="n", xlim=xli, ylim=yli, ylab="Density", xlab=columns[1])
+    }
+    
+    i_min <- ifelse(length(lLTabs) > 0, 1, 0)
+    for (i in 1:length(lLTabs)) {
+      LTabs <- lLTabs[[i]]
+      j_min <- ifelse(length(LTabs) > 0, 1, 0)
+      for (j in 1:length(LTabs)) {
+        tab <- LTabs[[j]]
+        
+        if (levels==2) {
+          if (histType == "density") {
+            #           lines(density(tab[,columns[1]]), lty=i, col=j)
+            #           points(tab[,columns[1]], tab[,columns[2]], pch=i, col=j)   
+            if (lins)
+              lines(density(tab[,columns[1]]), lty=i, col=j)
+          } else if (histType == "highLow") {
+            points(1:nrow(tab), sort(tab[,columns[1]], decreasing=T), pch=i, col=j)
+            if (lins)  
+              lines(1:nrow(tab), sort(tab[,columns[1]], decreasing=T), lty=i, col=j)
+          } else if (histType == "lowHigh") {
+            points(1:nrow(tab), sort(tab[,columns[1]], decreasing=F), pch=i, col=j)
+            if (lins)
+              lines(1:nrow(tab), sort(tab[,columns[1]], decreasing=F), lty=i, col=j)
+          } else stop ("histType needs to be element c(density, highLow, lowHigh")
+          #         if (!is.null(vLNames)) {
+#           legendChars <- c(legendChars, sprintf("%s %s",names(lLTabs)[i],names(LTabs)[j]))
+#           legendLines <- c(legendLines, i)
+#           legendPoints <- c(legendPoints, i)
+#           legendCols <- c(legendCols, j)
+          #         }
+        } else if (levels == 3) {
+          if (histType == "density") {
+            #           lines(density(tab[,columns[1]]), lty=i, col=j)
+            #           points(tab[,columns[1]], tab[,columns[2]], pch=i, col=j)   
+            tmp_values <- sapply(tab, function(x) x[,columns[1]])
+            lines(density(tmp_values), lty=i, col=j)
+          }  else if (histType %in% c("highLow", "lowHigh")) {            
+              if (histType == "highLow") {
+                k_min <- ifelse(length(tab) > 0, 1, 0)
+                for (k in k_min:length(tab)) {
+                  tt <- tab[[k]]
+                  points(1:nrow(tt), sort(tt[,columns[1]], decreasing=T), pch=i, col=j)
+                }
+                if (lins)  {
+                 tmp_meansTable <- getMeansOf(tab)
+                  lines(1:nrow(tmp_meansTable), sort(tmp_meansTable[,columns[1]], decreasing=T), lty=i, col=j)
+                }
+              } else if (histType == "lowHigh") {
+                k_min <- ifelse(length(tab) > 0, 1, 0)
+                for (k in k_min:length(tab)) {
+                  tt <- tab[[k]]
+                  points(1:nrow(tt), sort(tt[,columns[1]], decreasing=F), pch=i, col=j)
+                }                
+                if (lins) {
+                  tmp_meansTable <- getMeansOf(tab)
+                  lines(1:nrow(tmp_meansTable), sort(tmp_meansTable[,columns[1]], decreasing=F), lty=i, col=j)
+                }
+              } else stop ("histType needs to be element c(density, highLow, lowHigh")     
+          }  
+        }
+        
+        #         if (!is.null(vLNames)) {
+        legendChars <- c(legendChars, sprintf("%s %s",names(lLTabs)[i],names(LTabs)[j]))
+        legendLines <- c(legendLines, i)
+        if (histType != "density")
+          legendPoints <- c(legendPoints, i)
+        legendCols <- c(legendCols, j)
+        #         } 
+      }
+    }
+  } else {
+    
+  }
+  #   print(legendChars)
+  #   print(legendPoints)
+  #   print(legendLines)
+  if (length(legendChars) > 0 & lgnd)
+    legend("topright", legend=legendChars, lty=legendLines, col=legendCols, pch=legendPoints)
+} 
